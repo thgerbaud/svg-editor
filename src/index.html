@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:;">
+  <title>SVG Editor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&family=Syne:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/dracula.min.css">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --primary:    #ffb13b;
+      --bg-deep:    #0a0a0f;
+      --bg-panel:   #111118;
+      --bg-tab:     #16161f;
+      --bg-hover:   #1e1e2a;
+      --border:     #2a2a3a5c;
+      --accent:     #272727;
+      --accent-dim: #000000;
+      --accent-glow:#7c6af733;
+      --text:       #e8e6f0;
+      --text-dim:   #888899;
+      --text-muted: #555566;
+      --modified:   #f7a26a;
+      --success:    #6af7a2;
+      --danger:     #f76a6a;
+      --tab-h:      40px;
+      --toolbar-h:  52px;
+      --statusbar-h:28px;
+    }
+
+    html, body { height: 100%; overflow: hidden; }
+
+    body.darwin #app {
+      padding-top: 38px;
+    }
+
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    /* ── TOOLBAR ── */
+    #toolbar {
+      height: var(--toolbar-h);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      gap: 8px;
+      flex-shrink: 0;
+      -webkit-app-region: drag;
+    }
+
+    .toolbar-sep {
+      width: 1px;
+      height: 24px;
+      background: var(--border);
+      margin: 0 8px;
+    }
+
+    .btn {
+      -webkit-app-region: no-drag;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      background: transparent;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+    .btn:hover {
+      opacity: 0.8;
+    }
+    .btn.primary {
+      background: var(--accent-dim);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .btn.primary:hover {
+      background: var(--accent);
+      box-shadow: 0 0 12px var(--accent-glow);
+    }
+    .btn svg { width: 14px; height: 14px; }
+
+    .toolbar-right {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      -webkit-app-region: no-drag;
+    }
+
+    /* ── LAYOUT ── */
+    #app {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ── TABS ── */
+    #tabs-bar {
+      height: var(--tab-h);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: flex-end;
+      overflow-x: auto;
+      overflow-y: hidden;
+      flex-shrink: 0;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+    #tabs-bar::-webkit-scrollbar { height: 3px; }
+    #tabs-bar::-webkit-scrollbar-thumb { background: var(--border); }
+
+    .tab {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 16px 0 14px;
+      height: calc(var(--tab-h) - 1px);
+      border-top: 1px solid var(--border);
+      border-right: 1px solid var(--border);
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      cursor: pointer;
+      transition: all 0.12s ease;
+      white-space: nowrap;
+      position: relative;
+      flex-shrink: 0;
+    }
+    .tab.active::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: var(--primary);
+      border-radius: 2px 2px 0 0;
+    }
+    .tab-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--modified);
+      flex-shrink: 0;
+      display: none;
+    }
+    .tab.modified .tab-dot { display: block; }
+    .tab .tab-icon { font-size: 11px; opacity: 0.6; }
+    .tab-close {
+      width: 18px; height: 18px;
+      border-radius: 4px;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      color: var(--text-muted);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+    .tab-close:hover { background: var(--danger); color: #fff; }
+
+    #tab-new-btn {
+      width: 36px;
+      height: calc(var(--tab-h) - 1px);
+      display: flex; align-items: center; justify-content: center;
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 18px;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: color 0.15s;
+    }
+    #tab-new-btn:hover { color: var(--accent); }
+
+    /* ── MAIN PANES ── */
+    #main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    #editor-pane {
+      width: 50%;
+      min-width: 200px;
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--border);
+      position: relative;
+    }
+
+    .pane-header {
+      height: 34px;
+      display: flex;
+      align-items: center;
+      padding: 0 14px;
+      border-bottom: 1px solid var(--border);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .pane-header-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      opacity: 0.5;
+    }
+
+    .CodeMirror {
+      flex: 1;
+      height: 100%;
+      font-family: 'JetBrains Mono', monospace !important;
+      font-size: 13px;
+      line-height: 1.7;
+      background: #0d0d14 !important;
+    }
+    .CodeMirror-scroll { height: 100%; }
+    #editor-wrap {
+      flex: 1;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Resizer */
+    #resizer {
+      width: 4px;
+      background: var(--border);
+      cursor: col-resize;
+      flex-shrink: 0;
+      transition: background 0.15s;
+      position: relative;
+      z-index: 10;
+    }
+    #resizer:hover, #resizer.dragging { background: var(--primary); }
+
+    #preview-pane {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    #preview-header {
+      height: 34px;
+      display: flex;
+      align-items: center;
+      padding: 0 14px;
+      border-bottom: 1px solid var(--border);
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .preview-label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .preview-actions {
+      margin-left: auto;
+      padding: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .icon-btn {
+      width: 26px; height: 26px;
+      border-radius: 5px;
+      border: 1px solid var(--border);
+      background: transparent;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.12s;
+    }
+    .icon-btn:hover { 
+      opacity: 0.8;
+    }
+    .icon-btn svg { width: 13px; height: 13px; }
+
+    #preview-container {
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+      background: repeating-conic-gradient(#e8e8e8 0% 25%, #f5f5f5 0% 50%) 0 0 / 24px 24px;
+    }
+
+    #preview-svg-wrap {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: auto;
+      padding: 24px;
+      transform-origin: center center;
+    }
+
+    #preview-svg-wrap svg,
+    #preview-svg-wrap > * {
+      max-width: 100%;
+      max-height: 100%;
+    }
+
+    #preview-svg-wrap svg {
+      border: 2px dashed rgba(128,128,128,0.5);
+    }
+
+    #preview-error {
+      display: none;
+      position: absolute;
+      bottom: 40px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #2a0a0a;
+      border: 1px solid var(--danger);
+      border-radius: 8px;
+      padding: 10px 16px;
+      color: var(--danger);
+      font-size: 11px;
+      max-width: 80%;
+      text-align: center;
+    }
+
+    #empty-state {
+      display: flex;
+      flex-grow: 1;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      gap: 24px;
+      color: var(--text-muted);
+    }
+    #empty-state svg { width: 32px; height: 32px; opacity: 0.3; }
+    #empty-state h2 { font-size: 20px; font-weight: 700; color: var(--text-dim); }
+    #empty-state p { font-size: 13px; text-align: center; line-height: 1.6; max-width: 300px; }
+    .empty-actions { display: flex; gap: 10px; }
+
+    /* ── STATUSBAR ── */
+    #statusbar {
+      height: var(--statusbar-h);
+      background: var(--primary);
+      display: flex;
+      align-items: center;
+      padding: 0 14px;
+      gap: 16px;
+      font-size: 11px;
+      /* color: #ccc4ff; */
+      flex-shrink: 0;
+    }
+    .status-item { display: flex; align-items: center; gap: 5px; }
+    .status-item svg { width: 11px; height: 11px; opacity: 0.7; }
+    #status-path { 
+      margin-left: auto;
+      opacity: 0.6;
+      font-size: 10px;
+    }
+
+    /* Zoom indicator */
+    #zoom-indicator {
+      padding: 4px 10px;
+      font-size: 11px;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+
+<!-- APP -->
+<div id="app">
+  <!-- TABS -->
+  <div id="tabs-bar">
+    <button id="tab-new-btn" title="Nouvel onglet">+</button>
+  </div>
+
+  <!-- MAIN AREA -->
+  <div id="main">
+    <!-- Empty state shown when no tabs -->
+    <div id="empty-state">
+      <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="8" y="8" width="48" height="48" rx="8" stroke="currentColor" stroke-width="2"/>
+        <path d="M20 32 Q26 20 32 32 Q38 44 44 32" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+        <circle cx="32" cy="32" r="4" fill="currentColor" opacity="0.4"/>
+      </svg>
+      <h2>SVG Editor</h2>
+      <p>Créez un nouveau fichier ou ouvrez un SVG existant pour commencer.</p>
+      <div class="empty-actions">
+        <button class="btn" onclick="newFile()">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="2" width="10" height="12" rx="1.5"/><path d="M6 2v4h4" stroke-linecap="round"/></svg>
+          Nouveau fichier
+        </button>
+        <button class="btn primary" onclick="openFile()">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 5.5A1.5 1.5 0 013.5 4h3l1.5 1.5H13A1.5 1.5 0 0114.5 7v5A1.5 1.5 0 0113 13.5H3.5A1.5 1.5 0 012 12V5.5z" stroke-linejoin="round"/></svg>
+          Ouvrir un fichier
+        </button>
+      </div>
+    </div>
+
+    <!-- Editor + preview (hidden until a tab is open) -->
+    <div id="editor-pane" style="display:none">
+      <div id="editor-wrap">
+        <textarea id="codemirror-target"></textarea>
+      </div>
+    </div>
+
+    <div id="resizer" style="display:none"></div>
+
+    <div id="preview-pane" style="display:none">
+      <div id="preview-container">
+        <div id="preview-svg-wrap"></div>
+        <div id="preview-error"></div>
+      </div>
+      <div class="preview-actions">
+          <button class="icon-btn" id="btn-zoom-out" title="Zoom -">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14M4.5 7h5" stroke-linecap="round"/></svg>
+          </button>
+          <div id="zoom-indicator">100%</div>
+          <button class="icon-btn" id="btn-zoom-in" title="Zoom +">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14M7 4.5v5M4.5 7h5" stroke-linecap="round"/></svg>
+          </button>
+          <button class="icon-btn" id="btn-zoom-reset" title="Zoom 100%">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 3h4M3 3v4M13 13h-4M13 13v-4M3 13h4M3 13v-4M13 3h-4M13 3v4" stroke-linecap="round"/></svg>
+          </button>
+          <button class="icon-btn" id="btn-bg-toggle" title="Fond clair/sombre">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="8" cy="8" r="5.5"/><path d="M8 2.5v11" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+    </div>
+  </div>
+</div>
+
+<!-- STATUSBAR -->
+<div id="statusbar">
+  <div class="status-item">
+    <svg viewBox="0 0 12 12" fill="currentColor"><circle cx="6" cy="6" r="4"/></svg>
+    <span id="status-text">Prêt</span>
+  </div>
+  <div class="status-item">
+    <span id="status-size">-</span>
+  </div>
+  <span id="status-path">Aucun fichier</span>
+</div>
+
+<!-- CodeMirror -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/xml/xml.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closetag.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/xml-fold.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/search/searchcursor.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/comment/comment.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/keymap/sublime.min.js"></script>
+
+<script src="renderer.js"></script>
+</body>
+</html>
