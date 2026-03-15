@@ -5,6 +5,7 @@ const fs = require('fs');
 if (require('electron-squirrel-startup')) app.quit();
 
 let mainWindow;
+let pendingFile = null;
 
 const gotTheLock = app.requestSingleInstanceLock();
 
@@ -226,7 +227,7 @@ app.on('open-file', (event, filePath) => {
   if (mainWindow) {
     openFile(filePath);
   } else {
-    createWindow([filePath]);
+    pendingFile = filePath;
   }
 });
 
@@ -234,7 +235,11 @@ app.on('open-file', (event, filePath) => {
 const fileArgs = process.argv.slice(app.isPackaged ? 1 : 2).filter(a => a.endsWith('.svg'));
 
 app.whenReady().then(() => {
-  createWindow(fileArgs);
+  // priority : open-file Mac > args Windows/Linux
+  const filesToOpen = pendingFile ? [pendingFile] : fileArgs;
+  pendingFile = null;
+  
+  createWindow(filesToOpen);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
