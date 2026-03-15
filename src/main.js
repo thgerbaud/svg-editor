@@ -4,6 +4,8 @@ const fs = require('fs');
 
 if (require('electron-squirrel-startup')) app.quit();
 
+const isMac = process.platform === 'darwin';
+
 let mainWindow;
 let pendingFile = null;
 
@@ -31,7 +33,7 @@ function createWindow(filesToOpen = []) {
     height: 900,
     minWidth: 800,
     minHeight: 600,
-    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+    titleBarStyle: isMac ? 'hiddenInset' : 'default',
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -73,6 +75,20 @@ function createWindow(filesToOpen = []) {
 
 function buildMenu() {
   const template = [
+    ...(isMac ? [{ // MacOS menu
+      label: app.name,
+      submenu: [
+        { role: 'about', label: 'À propos de SVG Editor' },
+        { type: 'separator' },
+        { role: 'services' },
+        { type: 'separator' },
+        { role: 'hide', label: 'Masquer SVG Editor' },
+        { role: 'hideOthers', label: 'Masquer les autres' },
+        { role: 'unhide', label: 'Tout afficher' },
+        { type: 'separator' },
+        { role: 'quit', label: 'Quitter SVG Editor' },
+      ]
+    }] : []),
     {
       label: 'Fichier',
       submenu: [
@@ -103,8 +119,6 @@ function buildMenu() {
           accelerator: 'CmdOrCtrl+W',
           click: () => mainWindow.webContents.send('menu:close-tab'),
         },
-        { type: 'separator' },
-        { role: 'quit', label: 'Quitter' },
       ],
     },
     {
@@ -137,10 +151,10 @@ function buildMenu() {
           accelerator: 'CmdOrCtrl+R',
           click: () => mainWindow.webContents.send('menu:refresh-preview'),
         },
-        ...(process.env.NODE_ENV === 'development'? [
-            { type: 'separator' },
-            { role: 'toggleDevTools', label: 'Outils développeur' },
-          ] : []
+        ...(process.env.NODE_ENV === 'development' ? [
+          { type: 'separator' },
+          { role: 'toggleDevTools', label: 'Outils développeur' },
+        ] : []
         ),
         { type: 'separator' },
         { label: 'Zoom normal', accelerator: 'CmdOrCtrl+num0', role: 'resetZoom' },
@@ -238,7 +252,7 @@ app.whenReady().then(() => {
   // priority : open-file Mac > args Windows/Linux
   const filesToOpen = pendingFile ? [pendingFile] : fileArgs;
   pendingFile = null;
-  
+
   createWindow(filesToOpen);
 
   app.on('activate', () => {
@@ -247,5 +261,5 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
+  if (!isMac) app.quit();
 });
