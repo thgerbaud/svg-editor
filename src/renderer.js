@@ -23,8 +23,10 @@ const editorPane = document.getElementById('editor-pane');
 const resizer = document.getElementById('resizer');
 const previewPane = document.getElementById('preview-pane');
 const previewWrap = document.getElementById('preview-svg-wrap');
+const previewContainer = document.getElementById('preview-container');
 const previewError = document.getElementById('preview-error');
 const zoomIndicator = document.getElementById('zoom-indicator');
+const coordIndicator = document.getElementById('coord-indicator');
 const statusText = document.getElementById('status-text');
 const statusSize = document.getElementById('status-size');
 const statusPath = document.getElementById('status-path');
@@ -311,6 +313,35 @@ previewWrap.addEventListener('wheel', (e) => {
 document.getElementById('btn-bg-toggle').addEventListener('click', () => {
   lightBg = !lightBg;
   document.getElementById('preview-container').style.background = lightBg ? '' : 'repeating-conic-gradient(#151520 0% 25%, #111118 0% 50%) 0 0 / 24px 24px';
+});
+
+// Mouse coordinates inside the SVG
+const NO_COORDS = 'x: \u2013\u00a0\u00a0y: \u2013';
+
+function formatCoord(v) {
+  return Number.isFinite(v) ? (Math.round(v * 100) / 100).toString() : '\u2013';
+}
+
+previewContainer.addEventListener('mousemove', (e) => {
+  const svg = previewWrap.querySelector('svg');
+  if (!svg || typeof svg.getScreenCTM !== 'function') {
+    coordIndicator.textContent = NO_COORDS;
+    return;
+  }
+  const ctm = svg.getScreenCTM();
+  if (!ctm) {
+    coordIndicator.textContent = NO_COORDS;
+    return;
+  }
+  const pt = svg.createSVGPoint();
+  pt.x = e.clientX;
+  pt.y = e.clientY;
+  const p = pt.matrixTransform(ctm.inverse());
+  coordIndicator.textContent = `x: ${formatCoord(p.x)}\u00a0\u00a0y: ${formatCoord(p.y)}`;
+});
+
+previewContainer.addEventListener('mouseleave', () => {
+  coordIndicator.textContent = NO_COORDS;
 });
 
 // -------------------- Status bar --------------------
